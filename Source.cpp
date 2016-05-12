@@ -20,8 +20,8 @@ const int areathresh = 50;//75
 const int noofruns = 35;//35
 const int disti = 5;
 const int hood = 3; // checking for edge points in a (hood X hood) area
-const float stdgaus = 19.8843;
-const float meangaus = 96.8514;
+const float stdgaus = 25;//19.8843;
+const float meangaus = 100;// 96.8514;
 const int psudoB = 0;
 const int psudoG = 128;
 const int psudoR = 255;
@@ -60,7 +60,7 @@ void removebackground(Mat colorbarimg)
 				float exppo = -(pow((avinten - meangaus), 2)) / (2 * stdgaus*stdgaus);
 				float pro = (1 / (stdgaus*sqrt(2 * 3.14)))*exp(exppo);
 				
-				if (pro > 0.01)
+				if (pro > 0.015)
 				{
 					//cout << "hoo" << endl;
 					orgim.at<cv::Vec3b>(y, x)[0] = psudoB; orgim.at<cv::Vec3b>(y, x)[1] = psudoG; orgim.at<cv::Vec3b>(y, x)[2] = psudoR;
@@ -83,6 +83,10 @@ void removebackground(Mat colorbarimg)
 
 Mat findedges(Mat blackimage)
 {
+	Mat newimg = blackimage;
+	RNG rng(12345);
+	vector<vector<Point>> contours;
+	vector<Vec4i> hierarchy;
 	Mat grayimage; int scale = 1; int delta = 0;
 	//int ddepth = CV_16S;
 	Mat abs_grad_x, abs_grad_y, grad_x, grad_y, grad;
@@ -109,7 +113,20 @@ Mat findedges(Mat blackimage)
 	// Show the result:
 	imshow("cm_img0", cm_img0);
 	imwrite("colormap.png", cm_img0);
-	removebackground(cm_img0);
+	//removebackground(cm_img0);
+	dilate(grad, grad, Mat());
+	dilate(grad, grad, Mat());
+	dilate(grad, grad, Mat());
+	dilate(grad, grad, Mat());
+	dilate(grad, grad, Mat());
+	findContours(grad, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE); // Find the contours in the image
+	for (int uu = 0; uu < contours.size(); uu++)
+	{
+		Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255));
+		drawContours(newimg, contours, uu, color, 2, 8, vector<Vec4i>(), 0, Point());
+	}
+	imwrite("contours_drawn.png", newimg);
+
 
 	return grad;
 }
@@ -459,6 +476,7 @@ vector<vector<Point>> joincontours(vector<vector<Point>> DrawCont, Mat blackimag
 	for (int id = 0; id < temp.size(); id++)
 		drawContours(blackimage, temp, id, Scalar(0, 255, 0), 2, 8, vector<Vec4i>(), 0, Point());
 
+	
 	imshow("joined", blackimage);
 	return temp;
 
@@ -816,30 +834,7 @@ int main()
 
 	vector<vector<Point>>lapo = movesomemore(mcontours, blackimage1);
 
-	//otherannotate(mcontours, lapo, blackimage1);
-	//===================================Display Image with drawn contours====================================================
 
-	/*vector<vector<Point>> greencont = greencontourdetect();
-	vector<vector<Point>> grcont;
-	vector<vector<Point> >hullg(greencont.size());
-
-	for (int ig = 0; ig < greencont.size(); ig++)
-	{
-	double ag = contourArea(greencont[ig], false);
-	if (ag > 300 && ag < 1000)
-	{
-	convexHull(greencont[ig], hullg[ig], false);
-	grcont.push_back(hullg[ig]);
-	}
-	}
-
-
-	for (int ido = 0; ido < grcont.size(); ido++)
-	{
-	Scalar colo = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255));
-	//if (DrawCont[id].size()>15)// if greater than 15 points draw contours
-	drawContours(blackimage1, grcont, ido, Scalar(255, 255, 125), 2, 8, vector<Vec4i>(), 0, Point());
-	}*/    //green contours
 
 	for (int ido = 0; ido < lapo.size(); ido++)
 	{
