@@ -191,7 +191,7 @@ vector<vector<Point>> movesomemore(vector<vector<Point>> DrawCont, Mat blackimag
 }
 
 
-int howmanyedgepoints(Mat edges, int x, int y)
+int isitanedgepoints(Mat edges, int x, int y)
 {
 	int edgpoints = 0;
 	if ((x>10) && (x<1010) && (y>10) && (y < 1010))
@@ -200,7 +200,7 @@ int howmanyedgepoints(Mat edges, int x, int y)
 		{
 			for (int j = y - hood; j <= y + hood; j++)
 			{
-				if (edges.at<uchar>(j, i) == 0) //checking presense of edge points
+				if (edges.at<uchar>(j, i) == 0) //checking presense of edge points around a neigbourhood
 					edgpoints++;
 			}
 		}
@@ -233,7 +233,7 @@ vector<vector<Point>> outercontours(Mat grad)
 
 vector<vector<Point>> mixcontours(Mat grad, Mat newimg, vector<vector<Point>> blackcont, vector<vector<Point>> outercont)
 {
-	Mat blackimage = imread("16.5/16.5.1/2014-012-019_C57Bl6_LMM.14.24.4.34_E16.5_SOX9_NKX2.1_ACTA2-04.png");
+	Mat blackimage = imread("16.5/16.5.4/2015-012-003_LMM.24.4.30_C57Bl6_E16.5_NKX2.1_HOPX_ACTA2-01-01.png");
 	//Mat blackimage = imread("16.5/16.5.15/2015-001-013_LMM.14.24.4.40_C57Bl6_E16.5_HOPX-pHISH3_ACTA2-08.png");
 	vector<vector<Point>> blackcontt; vector<vector<Point>> outercontt; vector<float> asprat(outercont.size());
 	vector<float> ipts; vector<float> opts; vector<float>dipts; vector<float> dopts;
@@ -427,7 +427,7 @@ int main()
 {
 	// =============================== Initialization===============================================
 
-	Mat blackimage = imread("16.5/16.5.1/2014-012-019_C57Bl6_LMM.14.24.4.34_E16.5_SOX9_NKX2.1_ACTA2-04.png"); //Load source image
+	Mat blackimage = imread("16.5/16.5.4/2015-012-003_LMM.24.4.30_C57Bl6_E16.5_NKX2.1_HOPX_ACTA2-01-01.png"); //Load source image
 	//Mat blackimage = imread("16.5/16.5.15/2015-001-013_LMM.14.24.4.40_C57Bl6_E16.5_HOPX-pHISH3_ACTA2-08.png");
 	//GaussianBlur(blackimage, blackimage, Size(3, 3), 0, 0, BORDER_DEFAULT);
 	float gradpo; double angpo; int geo = 0; int topo = 0; int cun = 0; int diout = 5;
@@ -480,43 +480,86 @@ int main()
 	
 	//^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ DRAW CONTOURS, IMSHOW & END ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-	vector<vector<Point>> tempacontours(contours.size()); vector<vector<Point>> mcontours(tempacontours.size());
+	vector<vector<Point>> tempacontours(contours.size()); vector<vector<Point>> mcontours(tempacontours.size()); vector<vector<Point>> anotcontours(contours.size());
 
 
-	for (int i = 0; i < contours.size(); i++) // going through each contour
+	for (int i = 0; i < contours.size(); i++) // going through each initial contour
 	{
-		float chid = contourArea(contours[i], false);
+		cout << "Inside loop %d" << i+1<< endl;
 		cun = 0;//count of number of edges
-
+		int countofedge = 0;
 
 		//FIRST RUN : Moving the points in the contour by 5 and checking if edge point
-
+		// moving points ahead and storing it in tempacontours
 		for (int j = 0; j < contours[i].size(); j++)// going through points in every contour
 		{
+			cout << "Inside 1"<< endl;
 			pin = contours[i][j];// a particular point j in contour i
 			A = angletime(pin.x, pin.y, centroi[i].x + 15, centroi[i].y, centroi[i].x, centroi[i].y);// finding angle at each point of the contour
 			gotonewpoint(pin.x, pin.y, xpo, ypo, A, diout);
-			tempacontours[i].push_back(Point(xpo, ypo));// storing the newly moved to points into empty tempacontours
-			int uu = howmanyedgepoints(edges, xpo, ypo);
-			if (uu == 1)
-				cun++;
+			int uu = isitanedgepoints(edges, xpo, ypo);
+			if (uu == 1)//yes, it is a edge point
+			{
+				mcontours[i].push_back(Point(xpo, ypo));
+				countofedge++;
+			}
+
+			else
+				tempacontours[i].push_back(Point(xpo, ypo));
+		}
+		int ycon = 0;
+	DOP: if ((countofedge < (0.8*contours[i].size()))&& (ycon<200))
+	
+	{
+		ycon++;
+		cout << "Inside 2" << endl;
+		anotcontours[i].clear();
+		for (int q = 0; q < tempacontours[i].size(); q++)
+			anotcontours[i].push_back(Point(tempacontours[i][q].x, tempacontours[i][q].x));
+
+		tempacontours[i].clear();
+		for (int qi = 0; qi < anotcontours[i].size(); qi++)
+		{
+			int xpoo = 0, ypoo = 0;
+			Point yin = anotcontours[i][qi];
+			A = angletime(yin.x, yin.y, centroi[i].x + 15, centroi[i].y, centroi[i].x, centroi[i].y);// finding angle at each point of the contour
+			gotonewpoint(yin.x, yin.y, xpoo, ypoo, A, diout);
+			if (isitanedgepoints(edges, xpoo, ypoo) == 1)
+			{
+				mcontours[i].push_back(Point(xpoo, ypoo));
+				countofedge++;
+			}
+			else
+			{
+				tempacontours[i].push_back(Point(xpoo, ypoo)); 
+				goto DOP;
+			}
+		}
+	}
+		 
+
+
 		}
 
 
 		// SUBSEQUENT RUNS : Moving the points in the contour by 5 and checking if edge point till atleast half the points in the contour are edge points
 
-		if (cun < contours[i].size() / 2) // if (no of edge points in the contour < half the points in the contour)--> go for another run
+
+
+
+
+		/*if (cun < tempacontours[i].size() / 2) // if (no of edge points in the contour < half the points in the contour)--> go for another run
 		{
 			cun = 0;
 		pop:
 			for (int jo = 0; jo < tempacontours[i].size(); jo++)// going through points in every contour
 			{
-				pin = tempacontours[i][jo];// a particular point j in contour 
+				pin = tempacontours[i][jo];// a particular point jo in contour i
 				//pin = mcontours[i][jo];
 				A = angletime(pin.x, pin.y, centroi[i].x + 15, centroi[i].y, centroi[i].x, centroi[i].y);// finding angle at each point of the contour
 				gotonewpoint(pin.x, pin.y, xpo, ypo, A, diout);
 				mcontours[i].push_back(Point(xpo, ypo)); // new point now put into mcontours
-				if (howmanyedgepoints(edges, xpo, ypo) == 1)
+				if (isitanedgepoints(edges, xpo, ypo) == 1)
 					cun++;
 			}
 			//if not mcontours[i] has the final points we need for the ith contour
@@ -533,6 +576,8 @@ int main()
 		else
 			mcontours.push_back(tempacontours[i]);
 	}
+	*/
+
 
 
 	/*~~~~~CALL~~~~~~*/vector<vector<Point>>lapo = movesomemore(mcontours, blackimage1);
