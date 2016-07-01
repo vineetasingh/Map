@@ -1,0 +1,227 @@
+// AIM of the program: Detect the black contours within the images and find parameters assosiated with it
+
+#include "opencv2/core/core.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include <string>
+#include<conio.h>
+#include <opencv/cv.h>
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/features2d/features2d.hpp"
+#include <fstream>
+#include "opencv2/imgproc/imgproc.hpp"
+#include <iostream>
+
+
+
+using namespace cv;
+using namespace std;
+ofstream myfile;
+
+const int MinAreaContour = 200;
+
+
+void binarea(vector<vector<Point>>  contours, Mat & image)
+{
+	int count1 = 0, count2 = 0, count3 = 0, count4 = 0, count5 = 0;
+	int area1 = 0, area2 = 0, area3 = 0, area4 = 0, area5 = 0;
+	int lowcirc = 0,medcirc = 0, highcirc = 0, ex = 0;
+	// convexity
+	vector<vector<Point> > hull(contours.size());
+	vector<vector<int> > hullint(contours.size());
+	vector<Vec4i> convexityDefects;
+
+	// draw convex hulls around the contours
+	for (int i = 0; i < contours.size(); i++)
+	{
+		convexHull(Mat(contours[i]), hull[i], false);// to draw
+		convexHull(Mat(contours[i]), hullint[i], false);// to find defects
+	}
+
+
+	// counting the number of contours with low/med/high circularity using convexity defects
+	int totcont = 0;
+	for (int ia = 0; ia < contours.size(); ia++)
+	{
+		cv::convexityDefects(contours[ia], hullint[ia], convexityDefects);
+
+			if (convexityDefects.size() <= 9) // low circularity
+			{
+				lowcirc++;
+				//drawContours(image, hull, ia, Scalar(0, 255, 0), 2, 8, vector<Vec4i>(), 0, Point());
+				totcont++;
+			}
+			else if (convexityDefects.size() > 9 && convexityDefects.size() <= 14.5)
+			{
+				medcirc++;
+				//drawContours(image, hull, ia, Scalar(255, 255, 0), 2, 8, vector<Vec4i>(), 0, Point());
+				totcont++;
+			}
+			else if (convexityDefects.size() > 14.5)
+			{
+				highcirc++;
+				//drawContours(image, hull, ia, Scalar(0, 0, 255), 2, 8, vector<Vec4i>(), 0, Point());
+				totcont++;
+			}
+		
+	}
+
+
+	//create Region of Interest (ROI) and count red, green and red/greeen ratio
+	vector<Rect> boundRect(contours.size()); 
+	Mat roi; 
+	int grcnt[10000], redcnt[10000]; 
+	int whcnt[10000]; 
+
+	for (int i = 0; i < contours.size(); i++)
+	{
+			boundRect[i] = boundingRect(Mat(contours[i]));
+			float wid; float hie; int xmove; int ymove;
+			
+			wid = boundRect[i].width;
+			hie = boundRect[i].height;
+			xmove = boundRect[i].x;
+			ymove = boundRect[i].y;
+			Rect wroi = Rect(xmove, ymove, wid, hie);
+			roi = image(wroi);
+			// green threshold
+			Mat grthr(roi.rows, roi.cols, CV_8UC1);
+			cv::inRange(roi, cv::Scalar(255, 255, 0), cv::Scalar(255, 255, 128), grthr);//GREEN
+			grcnt[i] = countNonZero(grthr);
+
+			Mat redthr(roi.rows, roi.cols, CV_8UC1);
+			cv::inRange(roi, cv::Scalar(128, 17, 85), cv::Scalar(255, 60, 255), redthr);//(185,113,255)//RED
+			redcnt[i] = countNonZero(redthr);
+
+			Mat whthr(roi.rows, roi.cols, CV_8UC1);
+			cv::inRange(roi, cv::Scalar(200, 200, 200), cv::Scalar(255, 255, 255), whthr);//white
+			whcnt[i] = countNonZero(whthr);
+
+		
+	}
+
+	
+	int convexity = 0, convexity1 = 0, convexity2 = 0, convexity3 = 0, convexity4 = 0, convexity5 = 0;
+	int p = 0, r1 = 0, r2 = 0, r3 = 0, r4 = 0, r5 = 0;
+	int Rcount1 = 0, Rcount2 = 0, Rcount3 = 0, Rcount4 = 0, Rcount5 = 0;
+	int Gcount1 = 0, Gcount2 = 0, Gcount3 = 0, Gcount4 = 0, Gcount5 = 0;
+	int Wcount1 = 0, Wcount2 = 0, Wcount3 = 0, Wcount4 = 0, Wcount5 = 0;
+	int x4 = -1;
+	for (int i = 0; i < contours.size(); i++)
+	{
+		p++;
+		cv::convexityDefects(contours[i], hullint[i], convexityDefects);
+		convexity = convexityDefects.size();
+		double a = contourArea(contours[i], false);
+		if (a > 200)
+		{
+			x4++;
+		}
+		if (a >= 200 && a < 500)
+		{
+			count1 = count1 + 1; //count
+			area1 = area1 + a; //area
+			convexity1 = convexity1 + convexity;//convexity defects
+			Rcount1 = Rcount1 + redcnt[x4];//red count
+			Gcount1 = Gcount1 + grcnt[x4];//green count
+			Wcount1 = Wcount1 + whcnt[x4];// white count
+		}
+		else if (a >= 500 && a < 1000)
+		{
+			count2 = count2 + 1;
+			area2 = area2 + a;
+			convexity2 = convexity2 + convexity;
+			Rcount2 = Rcount2 + redcnt[x4];//red count
+			Gcount2 = Gcount2 + grcnt[x4];//green count
+			Wcount2 = Wcount2 + whcnt[x4];
+		}
+		else if (a >= 1000 && a < 1500)
+		{
+			count3 = count3 + 1;
+			area3 = area3 + a;
+			convexity3 = convexity3 + convexity;
+			Rcount3 = Rcount3 + redcnt[x4];//red count
+			Gcount3 = Gcount3 + grcnt[x4];//green count
+			Wcount3 = Wcount3 + whcnt[x4];
+		}
+		else if (a >= 1500 && a < 2000)
+		{
+			count4 = count4 + 1;
+			area4 = area4 + a;
+			convexity4 = convexity4 + convexity;
+			Rcount4 = Rcount4 + redcnt[x4];//red count
+			Gcount4 = Gcount4 + grcnt[x4];//green 
+			Wcount4 = Wcount4 + whcnt[x4];
+		}
+		else if (a >= 2000)
+		{
+			count5 = count5 + 1;
+			area5 = area5 + a;
+			convexity5 = convexity5 + convexity;
+			Rcount5 = Rcount5 + redcnt[x4];//red count
+			Gcount5 = Gcount5 + grcnt[x4];//green count
+			Wcount5 = Wcount5 + whcnt[x4];
+		}
+
+	}
+
+
+	//myfile << "Red " << "," << "green" << "," << "white" << "," << "area(200)>=no. of contours < area(500)" << ", " << "area(500)>=no. of contours < area(1000)" << ", " << "area(1000)>=no. of contours < area(1500)" << "," << "area(1500)>=no. of contours < area(2000)" << "," << "no. of contours >= area(2000)" << "," << "area(200)>=average area < area(500)" << "," << "area(500)>=average area < area(1000)" << "," << "area(1000)>=average area < area(1500)" << "," << "area(1500)>=average area < area(2000)" << "," << "average area >= area(2000)" << "," << "no of contours< =branchiness(9)" << "," << "branchiness(9)> no of contours< =branchiness(17)" << "," << "no of contours> branchiness(17)" << "," << "area(200)>=average convexity < area(500)" << "," << "area(500)>=average convexity < area(1000)" << "," << "area(1000)>=average convexity < area(1500)" << "," << "area(1500)>=average convexity < area(2000)" << "," << "average convexity >= area(2000)" << "," << "area(200)>=average red count < area(500)" << "," << "area(500)>=average red count < area(1000)" << "," << "area(1000)>=average red count < area(1500)" << "," << "area(1500)>=average red count < area(2000)" << "," << "average red count >= area(2000)" << "," << "area(200)>=average green count < area(500)" << "," << "area(500)>=average green count < area(1000)" << "," << "area(1000)>=average green count < area(1500)" << "," << "area(1500)>=average green count < area(2000)" << "," << "average green count >= area(2000)" << "," << "area(200)>=average white count < area(500)" << "," << "area(500)>=average white count < area(1000)" << "," << "area(1000)>=average white count < area(1500)" << "," << "area(1500)>=average white count < area(2000)" << "," << "average white count >= area(2000)" << endl;
+
+	myfile <<"Red "<<","<<"green"<<","<<"white"<< ","<<"area(200)>=no. of contours < area(500)" << ", " << "area(500)>=no. of contours < area(1000)" << ", " << "area(1000)>=no. of contours < area(1500)" << "," << "area(1500)>=no. of contours < area(2000)" << "," << "no. of contours >= area(2000)" << "," << "area(200)>=average area < area(500)" << "," << "area(500)>=average area < area(1000)" << "," << "area(1000)>=average area < area(1500)" << "," << "area(1500)>=average area < area(2000)" << "," << "average area >= area(2000)" << "," << "no of contours< =branchiness(9)" << "," << "branchiness(9)> no of contours< =branchiness(17)" << "," << "no of contours> branchiness(17)" << "," << "area(200)>=average convexity < area(500)" << "," << "area(500)>=average convexity < area(1000)" << "," << "area(1000)>=average convexity < area(1500)" << "," << "area(1500)>=average convexity < area(2000)" << "," << "average convexity >= area(2000)" << "," << "area(200)>=average red count < area(500)" << "," << "area(500)>=average red count < area(1000)" << "," << "area(1000)>=average red count < area(1500)" << "," << "area(1500)>=average red count < area(2000)" << "," << "average red count >= area(2000)" << "," << "area(200)>=average green count < area(500)" << "," << "area(500)>=average green count < area(1000)" << "," << "area(1000)>=average green count < area(1500)" << "," << "area(1500)>=average green count < area(2000)" << "," << "average green count >= area(2000)" << "," << "area(200) >= average white count < area(500)" << ", " << "area(500) >= average white count < area(1000)" << ", " << "area(1000) >= average white count < area(1500)" << ", " << "area(1500) >= average white count < area(2000)" << ", " << "average white count >= area(2000)"<<endl;
+	myfile << "SFTPC " << "," << "NKX2.1" << "," << "ACTA2" << "," << count1 << "," << count2 << "," << count3 << "," << count4 << "," << count5 << "," << area1 / (count1 + 1) << "," << area2 / (count2 + 1) << "," << area3 / (count3 + 1) << "," << area4 / (count4 + 1) << "," << area5 / (count5 + 1) << "," << lowcirc << "," << medcirc << "," << highcirc << "," << convexity1 / (count1 + 1) << "," << convexity2 / (count2 + 1) << "," << convexity3 / (count3 + 1) << "," << convexity4 / (count4 + 1) << "," << convexity5 / (count5 + 1) << "," << Rcount1 / (count1 + 1) << "," << Rcount2 / (count2 + 1) << "," << Rcount3 / (count3 + 1) << "," << Rcount4 / (count4 + 1) << "," << Rcount5 / (count5 + 1) << "," << Gcount1 / (count1 + 1) << "," << Gcount2 / (count2 + 1) << "," << Gcount3 / (count3 + 1) << "," << Gcount4 / (count4 + 1) << "," << Gcount5 / (count5 + 1) << "," << Wcount1 / (count1 + 1) << "," << Wcount2 / (count2 + 1) << "," << Wcount3 / (count3 + 1) << "," << Wcount4 / (count4 + 1) << "," << Wcount5 / (count5 + 1) << endl;
+
+
+
+}
+
+Mat coverup(Mat blackimage)
+// Covers up the labels from the topright part of the image
+{ 
+	Rect cover = Rect(680, 0, 280, 240); // coordinates ( 807,0) (807,224), (1023, 0), (1023, 224)
+	Rect cov = Rect(450, 930, 150, 46);
+	Mat roi_cover = blackimage(cover);
+	roi_cover = cv::Scalar(104, 40, 14);
+
+	return blackimage;
+
+}
+
+
+int main()
+{
+		myfile.open("Metrics_18.5.csv");
+		string imgPath = format("C:\\CCHMC\\LungMap\\E18.5_labelled\\NKX2.1_SFTPC_ACTA2\\2014-012-015_C57Bl6_E18.5_NKX2.1_SFTPC_ACTA2-02.png"); // path of the image
+		Mat image = imread(imgPath);
+		Mat UnlabelledImage= coverup(image); // Cover up the labels from the topright part of the image
+		Mat ThreshImage(UnlabelledImage.rows, UnlabelledImage.cols, CV_8UC1);// creates an empty image to hold thresholded imaage
+		cv::inRange(UnlabelledImage, cv::Scalar(0, 0, 0), cv::Scalar(35, 40, 50), ThreshImage);//thresholds the image
+		imshow("black", ThreshImage);
+		//===== ======================= Contouring===============================================
+		vector<vector<Point>> contours;// Vector for storing contour
+		vector<Vec4i> hierarchy; 
+		vector<vector<Point>> finalContours;
+
+		findContours(ThreshImage, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE);
+		for (int i = 0; i < contours.size(); i++)
+		{
+			double a = contourArea(contours[i], false);
+			if (a > MinAreaContour)
+			{
+				finalContours.push_back(contours[i]);
+				drawContours(UnlabelledImage, contours, i, Scalar(0, 255, 255), 2, 8, vector<Vec4i>(), 0, Point());
+			}
+
+		}
+		
+
+		//=======================================================================================
+		binarea(finalContours, UnlabelledImage);
+
+		imshow("Black Display Final", UnlabelledImage);
+		imwrite("16.5/16.5.19/output1.png", UnlabelledImage);
+
+		myfile.close();
+		waitKey(0);
+	
+}
