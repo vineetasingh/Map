@@ -1,0 +1,484 @@
+
+
+/*===========================LUNG MAP 16.5 (Cleaned Version_1)==================================================================================================*/
+#include "opencv2/core/core.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include <string>
+#include<conio.h>
+#include <opencv/cv.h>
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/features2d/features2d.hpp"
+#include <fstream>
+#include "opencv2/imgproc/imgproc.hpp"
+#include <iostream>
+
+
+
+using namespace cv;
+using namespace std;
+
+// Define Constants
+const int areathresh = 100;//75
+const int areath = 500;
+const int noofruns = 35;//35
+const int disti = 5;
+const int hood = 3; // checking for edge points in a (hood X hood) area
+//const float stdgaus = 25;//19.8843;
+//const float meangaus = 96.8514;// 96.8514;
+const int low_bound = 26;
+const int up_bound = 1000;
+const int dist_out = 5;
+RNG rng(12345);
+void coverup(Mat &image)
+{
+	Rect cover = Rect(750, 0, 250, 224); // coordinates ( 807,0) (807,224), (1023, 0), (1023, 224)
+	Mat roi_cover = image(cover);
+	roi_cover = cv::Scalar(104, 40, 14);//color
+}
+
+//define edges by thresholding color map derived from grayscale images- return edges
+Mat findedges(Mat image, string imname)
+{
+	string edgesWritePath = format("C:\\CCHMC\\LungMap\\Segmented\\edges_%s", imname.c_str());
+	Mat newimg = image;
+	Mat grayimage;
+	int scale = 1; int delta = 0;
+	//int ddepth = CV_16S;
+	Mat abs_grad_x, abs_grad_y, grad_x, grad_y, grad;
+	Mat detected;
+
+	GaussianBlur(image, image, Size(3, 3), 0, 0, 4);  // removing unnecessary noisy background
+	cvtColor(image, grayimage, CV_BGR2GRAY);
+
+	//trial
+	Canny(grayimage, detected, 30, 90, 3);
+	//imshow("cannyedges", detected);
+
+	/// Gradient X
+	Sobel(grayimage, grad_x, -1, 1, 0, 3, scale, delta, BORDER_DEFAULT);
+	convertScaleAbs(grad_x, abs_grad_x);
+
+	/// Gradient Y
+	Sobel(grayimage, grad_y, -1, 0, 1, 3, scale, delta, BORDER_DEFAULT);
+	convertScaleAbs(grad_y, abs_grad_y);
+
+	Mat colormap_img;
+	addWeighted(abs_grad_x, 2, abs_grad_y, 2, 0, grad);
+	applyColorMap(grad, colormap_img, COLORMAP_HOT);
+
+
+	cv::inRange(colormap_img, cv::Scalar(250, 250, 250), cv::Scalar(255, 255, 255), grad);
+	//imshow("edges", grad);
+
+	//imwrite(edgesWritePath, grad);
+
+
+	// Show the result:
+	//imshow("cm_img0", colormap_img);
+	//imwrite("colormap.png", colormap_img);
+	//removebackground(cm_img0);
+
+
+
+	return grad;
+}
+
+//================================================FUNCTION: Finds Gradient of the Image======================================================
+
+void findgradient(Mat image, Mat & grad_x, Mat & grad_y, Mat & grad)
+{
+	GaussianBlur(image, image, Size(3, 3), 0, 0, BORDER_DEFAULT);
+	/// Convert it to gray
+	Mat src_gray;
+	cvtColor(image, src_gray, CV_RGB2GRAY);
+
+	int scale = 1;
+	int delta = 0;
+	//int ddepth = CV_16S;
+	Mat abs_grad_x;
+	Mat abs_grad_y;
+	/// Generate grad_x and grad_y
+
+
+
+
+	/// Gradient X
+	Sobel(src_gray, grad_x, -1, 1, 0, 3, scale, delta, BORDER_DEFAULT);
+	convertScaleAbs(grad_x, abs_grad_x);
+
+	/// Gradient Y
+	Sobel(src_gray, grad_y, -1, 0, 1, 3, scale, delta, BORDER_DEFAULT);
+	convertScaleAbs(grad_y, abs_grad_y);
+	//cout << grad_x.size() << " , " << grad_y.size() << endl;
+	/// Total Gradient (approximate)
+	addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad);
+	//phase(grad_x, grad_y, anglo, true);
+
+
+}
+
+Mat helpangletime(Mat image)
+{
+	Mat src_gray;
+	cvtColor(image, src_gray, CV_RGB2GRAY);
+	Mat Sx;
+	Sobel(src_gray, Sx, CV_32F, 1, 0, 3);
+
+	Mat Sy;
+	Sobel(src_gray, Sy, CV_32F, 0, 1, 3);
+
+	Mat mag, ori;
+	magnitude(Sx, Sy, mag);
+	phase(Sx, Sy, ori, false);
+	return ori;
+}
+//======================================FUNCTION: Finds Centroid of each contour==========================================================================================
+vector<Point2f> findcentroid(vector<vector<Point>> contours)
+{
+
+	vector<Moments> mu(contours.size());
+
+	for (int i = 0; i < contours.size(); i++)
+		mu[i] = moments(contours[i], false);
+
+	///  Get the mass centers:
+	vector<Point2f> centroi(contours.size());
+	for (int i = 0; i < contours.size(); i++)
+	{
+		centroi[i] = Point2f(mu[i].m10 / mu[i].m00, mu[i].m01 / mu[i].m00);
+	}
+
+
+	return centroi;
+}
+Point2f findcentroid(vector<Point> contours)
+{
+
+	Moments mu;
+	mu = moments(contours, false);
+
+	///  Get the mass centers:
+	Point2f centroi(contours.size());
+	centroi = Point2f(mu.m10 / mu.m00, mu.m01 / mu.m00);
+	return centroi;
+}
+
+//======================================FUNCTION: Calculates angles at each point on the contour====================================
+double angletime(Mat orient, float px2, float py2, float px1, float py1, float cx1, float cy1)
+{//              (point being considered X, Y, horixontal line through centroid BX, BY, CX, CY)				centroid------------------B
+	double ang;
+	ang = orient.at<float>(px2, py2);
+	return ang;// returns angle at a single point on the contour
+}
+double angletime(float px2, float py2, float px1, float py1, float cx1, float cy1)
+{//              (point being considered X, Y, horixontal line through centroid BX, BY, CX, CY)				centroid------------------B
+	double angle1 = atan2(py2 - cy1, px2 - cx1) * 180.0 / CV_PI;
+	double angle2 = 0;  //double angle2 = atan2(py1 - cy1, px1 - cx1) * 180.0 / CV_PI;
+	double ang = angle1 - angle2;
+
+	if (ang > 360)
+		ang = ang - 360;
+	else if (ang < 0)
+		ang = ang + 360;
+	else
+		ang = ang;
+
+	ang = ang* CV_PI / 180;// converting to radians
+	//cout << ang << endl;
+	return ang;// returns angle at a single point on the contour
+}
+
+//================================================FUNCTION: Go to the new point============================================================
+void gotonewpoint(int x, int y, int & xpo, int & ypo, double theta, int dist)// takes in point(x,y)and angle to move in
+{
+
+
+
+	//theta = CV_PI;
+	if (x<low_bound || y<low_bound || x>up_bound || y>up_bound)// 26 and 1000 indicate x and y boundaries
+	{
+		xpo = x; ypo = y;
+	}
+	else
+	{
+		xpo = x + dist*cos(theta);// angle must be specified in radians
+		ypo = y + dist*sin(theta);
+	}
+
+
+
+	//xpo= (int)round(x + dist * cos(theta * CV_PI / 180.0));
+	//ypo = (int)round(y + dist * sin(theta * CV_PI / 180.0));//angle in degrees
+}
+
+
+vector<vector<Point>> movesomemore(Mat orient, vector<vector<Point>> contour)
+{
+	vector<Point2f> centro = findcentroid(contour);
+	int xpo, ypo;
+	vector<Point> temp_contour;
+	vector<vector<Point>> saved_contours;
+	for (int id = 0; id <contour.size(); id++)
+	{
+		for (int pd = 0; pd < contour[id].size(); pd++)
+		{
+			double A = angletime(contour[id][pd].x, contour[id][pd].y, centro[id].x + 15, centro[id].y, centro[id].x, centro[id].y);// finding angle at each point of the contour
+			gotonewpoint(contour[id][pd].x, contour[id][pd].y, xpo, ypo, A, 15);
+			temp_contour.push_back(Point(xpo, ypo));
+		}
+		saved_contours.push_back(temp_contour);
+		temp_contour.clear();
+	}
+	return  saved_contours;
+}
+
+
+bool isitanedgepoints(Mat edges, int x, int y)
+{
+	int edgpoints = 0;
+	int upbound = 1010;
+	int lobound = 10;
+	int edgpoint_thresh = 8;
+	if ((x>lobound) && (x<upbound) && (y>lobound) && (y < upbound))
+	{
+		for (int i = x - hood; i <= x + hood; i++)
+		{
+			for (int j = y - hood; j <= y + hood; j++)
+			{
+				if (edges.at<uchar>(j, i) == 0) //checking presense of edge points
+					edgpoints++;
+			}
+		}
+	}
+	if (edgpoints > edgpoint_thresh)
+		return 1;
+	else
+		return 0;
+}
+
+vector<vector<Point>> movebigcontours(vector<vector<Point>> contours, Mat edges)
+{
+	
+	Point pin;
+	double A;
+	vector<vector<Point>> fin_contours(contours.size());
+	vector<vector<Point>> not_reached_edge(contours.size());
+	vector<vector<Point>> reached_edge(contours.size());
+	int no_of_edges = 0;
+	int xpo, ypo;
+	vector<Point2f> centroid = findcentroid(contours);// finding centroid of all contours in the entire image
+	for (int i = 0; i < contours.size(); i++)
+	{
+		int distance_move = 15;
+		// finding centroid of all contours in the entire image
+		for (int j = 0; j < contours[i].size(); j++)// going through points in every contour
+		{
+			pin = contours[i][j];// a particular point j in contour i
+			A = angletime(pin.x, pin.y, centroid[i].x + 15, centroid[i].y, centroid[i].x, centroid[i].y);// finding angle at each point of the contour
+			gotonewpoint(pin.x, pin.y, xpo, ypo, A, distance_move);
+			int uu = isitanedgepoints(edges, xpo, ypo);
+			if (uu == 1)
+				reached_edge[i].push_back(Point(xpo, ypo));
+			else
+				not_reached_edge[i].push_back(Point(xpo, ypo));
+
+
+		}
+
+		while ((abs(reached_edge[i].size() - not_reached_edge[i].size())) <= 1)
+		{
+			
+			Point2f cent = findcentroid(not_reached_edge[i]);
+
+			for (int x = 0; x < not_reached_edge[i].size(); x++)
+			{
+				pin = not_reached_edge[i][x];
+				A = angletime(pin.x, pin.y, cent.x + 15, cent.y, cent.x, cent.y);
+				gotonewpoint(pin.x, pin.y, xpo, ypo, A, distance_move);
+				int decision = isitanedgepoints(edges, xpo, ypo);
+				if (decision == 1)
+					reached_edge[i].push_back(Point(xpo, ypo));
+				else
+					not_reached_edge[i].push_back(Point(xpo, ypo));
+				
+			}
+			
+		}
+
+	}
+
+
+	for (int m = 0; m < reached_edge.size(); m++)
+	{
+		for (int n = 0; n < reached_edge[m].size(); n++)
+		{
+			fin_contours[m].push_back(reached_edge[m][n]);
+		}
+	}
+	for (int m = 0; m < not_reached_edge.size(); m++)
+	{
+		for (int n = 0; n < not_reached_edge[m].size(); n++)
+		{
+			fin_contours[m].push_back(not_reached_edge[m][n]);
+		}
+	}
+	
+	return fin_contours;
+}
+
+//===================================================MAIN STARTS==========================================================
+
+int main()
+{
+	// =============================== Initialization===============================================
+	std::ifstream file("testset16.5.txt");
+	std::string imname;
+	while (std::getline(file, imname))
+	{
+		string imagepath = format("C:\\CCHMC\\LungMap\\Lung_16.5_TestSet\\%s", imname.c_str());
+		string imageWritePath = format("C:\\CCHMC\\LungMap\\Segmented\\mod_%s", imname.c_str());
+		Mat inputImage = imread(imagepath);
+		if (inputImage.empty())
+			cout << "NOT FOUND" << endl;
+		else
+			cout << format("processing %s", imname.c_str()) << endl;
+
+		//GaussianBlur(blackimage, blackimage, Size(3, 3), 0, 0, BORDER_DEFAULT);
+
+		//variable definition
+		float gradpo, angpo, probinfo;
+		int no_of_edges = 0;
+		int xpo = 0, ypo = 0;
+		double A; //angle
+		Point pin;
+		Mat  grad_x, grad_y, grad, blurImage;
+		vector<vector<Point>> black_contours, storconts, contours, DrawCont; // Vector for storing contour
+		vector<Point>storag, coont, backup;
+		vector<Vec4i> black_hierarchy;
+		vector<vector<double>> angstore;
+		vector<double> ango;// to associate angles with each point
+		vector<int> ido;
+
+		Mat orient = helpangletime(inputImage);
+
+		/*~~~~~CALL~~~~~~*/
+		coverup(inputImage);   //Covers up the written text
+		Mat cloneImage = inputImage.clone(); //to draw contours on
+		// =============================== =================================================================
+
+		/*~~~~~CALL~~~~~~*/
+		Mat edges = findedges(inputImage, imname);// returns edges of the image
+		/*~~~~~CALL~~~~~~*/
+		findgradient(inputImage, grad_x, grad_y, grad);// finds gradient of the whole image once in the program
+
+
+		// ##  STEP 1 : Find good black contours 
+		//===== ======================= Thresholding &  Contouring===============================================
+		Mat thr_inputImage(inputImage.rows, inputImage.cols, CV_8UC1);
+		GaussianBlur(inputImage, blurImage, Size(7, 7), 0, 0, 4);  // removing unnecessary noisy background
+		cv::inRange(blurImage, cv::Scalar(0, 0, 0), cv::Scalar(35, 45, 45), thr_inputImage);//35, 30, 30)  35, 45, 35
+		findContours(thr_inputImage, black_contours, black_hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE); // find all black contours
+
+		for (int dop = 0; dop < black_contours.size(); dop++)  // finding and saving the contours that are above a certain area
+		{
+			float cont_area = contourArea(black_contours[dop], false);
+			if (cont_area > areathresh)
+				contours.push_back(black_contours[dop]); //saving only the large contours in another variable
+		}
+
+		// ##  END STEP 1
+
+
+		/*~~~~~CALL~~~~~~*/
+		vector<Point2f> centroi = findcentroid(contours);// finding centroid of all contours in the entire image
+
+		//^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ DRAW CONTOURS, IMSHOW & END ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+		vector<vector<Point>> temp_contours(contours.size());
+		vector<vector<Point>> alternate_contours(temp_contours.size());
+
+
+		for (int i = 0; i < contours.size(); i++) // going through each contour
+		{
+
+			no_of_edges = 0;//count of number of edges
+
+
+			//FIRST RUN : Moving the points in the contour by 5 and checking if edge point
+
+			for (int j = 0; j < contours[i].size(); j++)// going through points in every contour
+			{
+				pin = contours[i][j];// a particular point j in contour i
+				A = angletime(pin.x, pin.y, centroi[i].x + 15, centroi[i].y, centroi[i].x, centroi[i].y);// finding angle at each point of the contour
+				gotonewpoint(pin.x, pin.y, xpo, ypo, A, dist_out);
+				temp_contours[i].push_back(Point(xpo, ypo));// storing the newly moved to points into empty temp_contours
+				int uu = isitanedgepoints(edges, xpo, ypo);
+				if (uu == 1)
+					no_of_edges++;
+			}
+
+
+			// SUBSEQUENT RUNS : Moving the points in the contour by 5 and checking if edge point till atleast half the points in the contour are edge points
+
+			if (no_of_edges < contours[i].size() / 2) // if (no of edge points in the contour < half the points in the contour)--> go for another run
+			{
+				no_of_edges = 0;
+			POP:
+				Point2f recalc_centroi = findcentroid(temp_contours[i]);
+				for (int jo = 0; jo < temp_contours[i].size(); jo++)// going through points in every contour
+				{
+					pin = temp_contours[i][jo];// a particular point j in contour 
+					//pin = mcontours[i][jo];
+
+					A = angletime(orient, pin.x, pin.y, recalc_centroi.x + 15, recalc_centroi.y, recalc_centroi.x, recalc_centroi.y);// finding angle at each point of the contour
+					gotonewpoint(pin.x, pin.y, xpo, ypo, A, dist_out);
+					alternate_contours[i].push_back(Point(xpo, ypo)); // new point now put into alternate_contours
+					if (isitanedgepoints(edges, xpo, ypo) == 1)
+						no_of_edges++;
+				}
+
+
+				//if no of edges is leasser than half the size of alternate_contours  // else: moves on to next set of contour
+				if (no_of_edges < alternate_contours[i].size() / 2)
+				{
+					no_of_edges = 0;
+					temp_contours[i].clear();
+					for (int ya = 0; ya < temp_contours[i].size(); ya++)
+						temp_contours[ya].push_back(Point(alternate_contours[i][ya].x, alternate_contours[i][ya].y));
+					alternate_contours[i].clear();
+					goto POP;
+				}
+			}
+
+			else
+				alternate_contours.push_back(temp_contours[i]);
+		}
+
+
+		/*~~~~~CALL~~~~~~*/vector<vector<Point>>lapo = movesomemore(orient, alternate_contours);
+
+		vector<vector<Point>> big_contours;
+		for (int ido = 0; ido < lapo.size(); ido++)
+		{
+
+			float chaido = fabs(contourArea(cv::Mat(lapo[ido])));
+			if (chaido >20000)
+				big_contours.push_back(lapo[ido]);
+			else
+				drawContours(cloneImage, lapo, ido, Scalar(0, 255, 0), 2, 8, vector<Vec4i>(), 0, Point());
+		}
+		/*Move bigger contour points outward*/
+		vector<vector<Point>> mod_big_contours = movebigcontours(big_contours, edges);
+
+		for (int g = 0; g < mod_big_contours.size(); g++)
+			drawContours(cloneImage, mod_big_contours, g, Scalar(0, 255, 255), 2, 8, vector<Vec4i>(), 0, Point());
+
+
+		//imshow("Black Display Final", cloneImage);
+
+		imwrite(imageWritePath, cloneImage);
+		waitKey(0);
+		return(0);
+	}
+}
