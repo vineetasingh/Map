@@ -266,63 +266,56 @@ vector<vector<Point>> movebigcontours(vector<vector<Point>> contours, Mat edges)
 	vector<vector<Point>> not_reached_edge(contours.size());
 	vector<vector<Point>> reached_edge(contours.size());
 	int no_of_edges = 0;
+	int counter = 0;
+	int not_reached_count = 0, reached_count = 0;
 	int xpo, ypo;
 	vector<Point2f> centroid = findcentroid(contours);// finding centroid of all contours in the entire image
 	for (int i = 0; i < contours.size(); i++)
 	{
 		int distance_move = 15;
 		// finding centroid of all contours in the entire image
+		counter = 0;
 		for (int j = 0; j < contours[i].size(); j++)// going through points in every contour
 		{
 			pin = contours[i][j];// a particular point j in contour i
 			A = angletime(pin.x, pin.y, centroid[i].x + 15, centroid[i].y, centroid[i].x, centroid[i].y);// finding angle at each point of the contour
 			gotonewpoint(pin.x, pin.y, xpo, ypo, A, distance_move);
 			int uu = isitanedgepoints(edges, xpo, ypo);
-			if (uu == 1)
-				reached_edge[i].push_back(Point(xpo, ypo));
-			else
-				not_reached_edge[i].push_back(Point(xpo, ypo));
-
-
-		}
-
-		while ((abs(reached_edge[i].size() - not_reached_edge[i].size())) <= 1)
-		{
-			
-			Point2f cent = findcentroid(not_reached_edge[i]);
-
-			for (int x = 0; x < not_reached_edge[i].size(); x++)
+			if (uu != 1)
 			{
-				pin = not_reached_edge[i][x];
-				A = angletime(pin.x, pin.y, cent.x + 15, cent.y, cent.x, cent.y);
-				gotonewpoint(pin.x, pin.y, xpo, ypo, A, distance_move);
-				int decision = isitanedgepoints(edges, xpo, ypo);
-				if (decision == 1)
-					reached_edge[i].push_back(Point(xpo, ypo));
-				else
-					not_reached_edge[i].push_back(Point(xpo, ypo));
-				
+				counter++;
+			}//not_reached_edge[i].push_back(Point(xpo, ypo));
+		}
+
+		if (counter >= 0.05*contours[i].size() && counter <= 0.15*contours[i].size())
+			not_reached_edge.push_back(contours[i]);
+		else
+			reached_edge.push_back(contours[i]);
+	}
+
+
+		vector<vector<Point>> mod_not_reached(not_reached_edge.size());
+		vector<Point2f> recalc_centroid = findcentroid(not_reached_edge); 
+		for (int u = 0; u < not_reached_edge.size(); u++)
+		{
+			for (int e = 0; e < not_reached_edge[u].size(); e++)
+			{
+				pin = not_reached_edge[u][e];// a particular point j in contour i
+				A = angletime(pin.x, pin.y, recalc_centroid[u].x + 15, recalc_centroid[u].y, recalc_centroid[u].x, recalc_centroid[u].y);// finding angle at each point of the contour
+				gotonewpoint(pin.x, pin.y, xpo, ypo, A, 45);
+				mod_not_reached[u].push_back(Point(xpo, ypo));
 			}
-			
 		}
+		
+		for (int m = 0; m < reached_edge.size(); m++)
+			fin_contours.push_back(reached_edge[m]);
 
-	}
+		for (int n = 0; n < mod_not_reached.size(); n++)
+			fin_contours.push_back(mod_not_reached[n]);
+	
+		/*-------------------------------------------------------------------------------*/
 
-
-	for (int m = 0; m < reached_edge.size(); m++)
-	{
-		for (int n = 0; n < reached_edge[m].size(); n++)
-		{
-			fin_contours[m].push_back(reached_edge[m][n]);
-		}
-	}
-	for (int m = 0; m < not_reached_edge.size(); m++)
-	{
-		for (int n = 0; n < not_reached_edge[m].size(); n++)
-		{
-			fin_contours[m].push_back(not_reached_edge[m][n]);
-		}
-	}
+		
 	
 	return fin_contours;
 }
@@ -468,7 +461,7 @@ int main()
 			else
 				drawContours(cloneImage, lapo, ido, Scalar(0, 255, 0), 2, 8, vector<Vec4i>(), 0, Point());
 		}
-		/*Move bigger contour points outward*/
+
 		vector<vector<Point>> mod_big_contours = movebigcontours(big_contours, edges);
 
 		for (int g = 0; g < mod_big_contours.size(); g++)
@@ -479,6 +472,6 @@ int main()
 
 		imwrite(imageWritePath, cloneImage);
 		waitKey(0);
-		return(0);
+
 	}
 }
