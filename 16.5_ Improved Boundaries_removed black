@@ -1,4 +1,5 @@
 
+//moves bigger(bronchiole contours)outwards 
 
 /*===========================LUNG MAP 16.5 (Cleaned Version_2)==================================================================================================*/
 #include "opencv2/core/core.hpp"
@@ -257,9 +258,12 @@ bool isitanedgepoints(Mat edges, int x, int y)
 		return 0;
 }
 
+
+
+
 vector<vector<Point>> movebigcontours(vector<vector<Point>> contours, Mat edges)
 {
-	
+
 	Point pin;
 	double A;
 	vector<vector<Point>> fin_contours(contours.size());
@@ -294,31 +298,80 @@ vector<vector<Point>> movebigcontours(vector<vector<Point>> contours, Mat edges)
 	}
 
 
-		vector<vector<Point>> mod_not_reached(not_reached_edge.size());
-		vector<Point2f> recalc_centroid = findcentroid(not_reached_edge); 
-		for (int u = 0; u < not_reached_edge.size(); u++)
+	vector<vector<Point>> mod_not_reached(not_reached_edge.size());
+	vector<Point2f> recalc_centroid = findcentroid(not_reached_edge);
+	for (int u = 0; u < not_reached_edge.size(); u++)
+	{
+		for (int e = 0; e < not_reached_edge[u].size(); e++)
 		{
-			for (int e = 0; e < not_reached_edge[u].size(); e++)
-			{
-				pin = not_reached_edge[u][e];// a particular point j in contour i
-				A = angletime(pin.x, pin.y, recalc_centroid[u].x + 15, recalc_centroid[u].y, recalc_centroid[u].x, recalc_centroid[u].y);// finding angle at each point of the contour
-				gotonewpoint(pin.x, pin.y, xpo, ypo, A, 45);
-				mod_not_reached[u].push_back(Point(xpo, ypo));
-			}
+			pin = not_reached_edge[u][e];// a particular point j in contour i
+			A = angletime(pin.x, pin.y, recalc_centroid[u].x + 15, recalc_centroid[u].y, recalc_centroid[u].x, recalc_centroid[u].y);// finding angle at each point of the contour
+			gotonewpoint(pin.x, pin.y, xpo, ypo, A, 45);
+			mod_not_reached[u].push_back(Point(xpo, ypo));
 		}
-		
-		for (int m = 0; m < reached_edge.size(); m++)
-			fin_contours.push_back(reached_edge[m]);
+	}
 
-		for (int n = 0; n < mod_not_reached.size(); n++)
-			fin_contours.push_back(mod_not_reached[n]);
-	
-		/*-------------------------------------------------------------------------------*/
+	for (int m = 0; m < reached_edge.size(); m++)
+		fin_contours.push_back(reached_edge[m]);
 
-		
-	
+	for (int n = 0; n < mod_not_reached.size(); n++)
+		fin_contours.push_back(mod_not_reached[n]);
+
+	/*-------------------------------------------------------------------------------*/
+
+
+
 	return fin_contours;
 }
+
+
+vector<vector<Point>> removeunwantedblack(vector<vector<Point>> contours, Mat img)
+{
+	Mat img_LAB, thresh_img;
+	vector<vector<Point>> store_contours; vector<vector<Point>> saved_contours;
+	vector<Rect> boundRect(contours.size());
+	cvtColor(img, img_LAB, CV_BGR2Lab);
+	cv::inRange(img_LAB, cv::Scalar(0, 100, 100), cv::Scalar(30, 150, 150), thresh_img);
+	dilate(thresh_img, thresh_img, Mat());
+	int last = contours.size() - 1;
+	for (int i = 0; i < contours.size()-1; i++)
+	{
+
+	
+			
+			boundRect[i] = boundingRect(Mat(contours[i]));
+			if ((boundRect[i].x > 0) && (boundRect[i].y > 0) && (boundRect[i].x < 1024) && (boundRect[i].y < 1024))
+			{
+
+				Mat roi = thresh_img(boundRect[i]);// creating a new image from roi
+				if (roi.rows < 1024 && roi.cols < 1024)
+				{
+					int imgsiz = roi.cols*  roi.rows;
+					int  blackpix = countNonZero(roi); // count of number of white pixels in thresholded ROI
+					int remain_pix = imgsiz - blackpix;
+					if ((remain_pix / blackpix)< 0.8 && (fabs(contourArea(Mat(contours[i]))) <5000))//(remain_pix <= 1000)
+					{
+						//cout << "IN  " << (float) remain_pix / blackpix << endl;  //cout << imgsiz/remain_pix<< endl;
+						
+							store_contours.push_back(contours[i]);
+						/*else
+							saved_contours.push_back(contours[i]);*/
+
+					}
+					else
+						saved_contours.push_back(contours[i]);
+					
+						///cout << "OUT  " << (float) remain_pix / blackpix << endl;
+				}
+			}
+			/*else
+				cout << "WHOOPS";*/
+		}
+	saved_contours.push_back(contours[last]);
+	return saved_contours;
+	}
+
+
 
 //===================================================MAIN STARTS==========================================================
 
@@ -331,6 +384,7 @@ int main()
 	{
 		string imagepath = format("C:\\CCHMC\\LungMap\\Lung_16.5_TestSet\\%s", imname.c_str());
 		string imageWritePath = format("C:\\CCHMC\\LungMap\\Segmented\\mod_%s", imname.c_str());
+		string imageWritePath2 = format("C:\\CCHMC\\LungMap\\Segmented\\remove_%s", imname.c_str());
 		Mat inputImage = imread(imagepath);
 		if (inputImage.empty())
 			cout << "NOT FOUND" << endl;
@@ -352,14 +406,16 @@ int main()
 		vector<vector<double>> angstore;
 		vector<double> ango;// to associate angles with each point
 		vector<int> ido;
+		Mat img_LAB;
 
 		Mat orient = helpangletime(inputImage);
 
 		/*~~~~~CALL~~~~~~*/
 		coverup(inputImage);   //Covers up the written text
+
 		Mat cloneImage = inputImage.clone(); //to draw contours on
 		// =============================== =================================================================
-
+		Mat cloneImage2 = inputImage.clone();
 		/*~~~~~CALL~~~~~~*/
 		Mat edges = findedges(inputImage, imname);// returns edges of the image
 		/*~~~~~CALL~~~~~~*/
@@ -390,6 +446,7 @@ int main()
 
 		vector<vector<Point>> temp_contours(contours.size());
 		vector<vector<Point>> alternate_contours(temp_contours.size());
+		vector<vector<Point>> store_contours;
 
 
 		for (int i = 0; i < contours.size(); i++) // going through each contour
@@ -456,21 +513,33 @@ int main()
 		{
 
 			float chaido = fabs(contourArea(cv::Mat(lapo[ido])));
+
 			if (chaido >20000)
 				big_contours.push_back(lapo[ido]);
 			else
+			{
+				store_contours.push_back(lapo[ido]);
 				drawContours(cloneImage, lapo, ido, Scalar(0, 255, 0), 2, 8, vector<Vec4i>(), 0, Point());
+			}
 		}
 
 		vector<vector<Point>> mod_big_contours = movebigcontours(big_contours, edges);
 
 		for (int g = 0; g < mod_big_contours.size(); g++)
+		{
 			drawContours(cloneImage, mod_big_contours, g, Scalar(0, 255, 255), 2, 8, vector<Vec4i>(), 0, Point());
+			store_contours.push_back(mod_big_contours[g]);
+		}
 
 
-		//imshow("Black Display Final", cloneImage);
 
+		vector<vector<Point>> new_contours= removeunwantedblack(store_contours, inputImage);
+		for (int g = 0; g < new_contours.size(); g++)
+		{
+			drawContours(cloneImage2, new_contours, g, Scalar(0, 255, 255), 2, 8, vector<Vec4i>(), 0, Point());
+		}
 		imwrite(imageWritePath, cloneImage);
+		imwrite(imageWritePath2, cloneImage2);
 		waitKey(0);
 
 	}
