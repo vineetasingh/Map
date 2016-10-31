@@ -1,5 +1,4 @@
-
-//moves bigger(bronchiole contours)outwards 
+//final thesis code, includes merge contours
 
 /*===========================LUNG MAP 16.5 (Cleaned Version_2)==================================================================================================*/
 #include "opencv2/core/core.hpp"
@@ -35,21 +34,21 @@ void coverup(Mat &image)
 {
 	Rect cover = Rect(750, 0, 250, 224); // coordinates ( 807,0) (807,224), (1023, 0), (1023, 224)
 	Mat roi_cover = image(cover);
-	roi_cover = cv::Scalar(104, 40, 14);//color
+	roi_cover.setTo(cv::Scalar(104, 40, 14));//color
 }
 
 //define edges by thresholding color map derived from grayscale images- return edges
 Mat findedges(Mat image, string imname)
 {
-	string edgesWritePath = format("C:\\CCHMC\\LungMap\\Segmented\\edges_%s", imname.c_str());
+	string edgesWritePath = format("C:\\Users\\VIneeta\\Documents\\Visual Studio 2013\\Projects\\OpenCV-Test\\OpenCV-Test\\Lung_16.5_TestSet\\Segmented\\edges_%s", imname.c_str());
 	Mat newimg = image;
 	Mat grayimage;
 	int scale = 1; int delta = 0;
 	//int ddepth = CV_16S;
 	Mat abs_grad_x, abs_grad_y, grad_x, grad_y, grad;
 	Mat detected;
-
-	GaussianBlur(image, image, Size(3, 3), 0, 0, 4);  // removing unnecessary noisy background
+	// removing unnecessary noisy background;
+	GaussianBlur(image, image, Size(3, 3), 0, 0, 4); 
 	cvtColor(image, grayimage, CV_BGR2GRAY);
 
 	//trial
@@ -92,7 +91,7 @@ void findgradient(Mat image, Mat & grad_x, Mat & grad_y, Mat & grad)
 	GaussianBlur(image, image, Size(3, 3), 0, 0, BORDER_DEFAULT);
 	/// Convert it to gray
 	Mat src_gray;
-	cvtColor(image, src_gray, CV_RGB2GRAY);
+	cvtColor(image, src_gray, CV_BGR2GRAY);
 
 	int scale = 1;
 	int delta = 0;
@@ -118,7 +117,7 @@ void findgradient(Mat image, Mat & grad_x, Mat & grad_y, Mat & grad)
 
 
 }
-
+// ------------------------Calculates angle of gradient---------------------------------------------
 Mat helpangletime(Mat image)
 {
 	Mat src_gray;
@@ -143,7 +142,7 @@ vector<Point2f> findcentroid(vector<vector<Point>> contours)
 	for (int i = 0; i < contours.size(); i++)
 		mu[i] = moments(contours[i], false);
 
-	///  Get the mass centers:
+	///  Get the mass centers:
 	vector<Point2f> centroi(contours.size());
 	for (int i = 0; i < contours.size(); i++)
 	{
@@ -159,7 +158,7 @@ Point2f findcentroid(vector<Point> contours)
 	Moments mu;
 	mu = moments(contours, false);
 
-	///  Get the mass centers:
+	///  Get the mass centers:
 	Point2f centroi(contours.size());
 	centroi = Point2f(mu.m10 / mu.m00, mu.m01 / mu.m00);
 	return centroi;
@@ -167,15 +166,16 @@ Point2f findcentroid(vector<Point> contours)
 
 //======================================FUNCTION: Calculates angles at each point on the contour====================================
 double angletime(Mat orient, float px2, float py2, float px1, float py1, float cx1, float cy1)
-{//              (point being considered X, Y, horixontal line through centroid BX, BY, CX, CY)				centroid------------------B
+{//              (point being considered X, Y, horixontal line through centroid BX, BY, CX, CY)				centroid------------------B
 	double ang;
 	ang = orient.at<float>(px2, py2);
 	return ang;// returns angle at a single point on the contour
 }
 double angletime(float px2, float py2, float px1, float py1, float cx1, float cy1)
-{//              (point being considered X, Y, horixontal line through centroid BX, BY, CX, CY)				centroid------------------B
+{//              (point being considered X, Y, horixontal line through centroid BX, BY, CX, CY)				centroid------------------B
 	double angle1 = atan2(py2 - cy1, px2 - cx1) * 180.0 / CV_PI;
-	double angle2 = 0;  //double angle2 = atan2(py1 - cy1, px1 - cx1) * 180.0 / CV_PI;
+	double angle2 = 0; 
+	//double angle2 = atan2(py1 - cy1, px1 - cx1) * 180.0 / CV_PI;
 	double ang = angle1 - angle2;
 
 	if (ang > 360)
@@ -231,7 +231,7 @@ vector<vector<Point>> movesomemore(Mat orient, vector<vector<Point>> contour)
 		saved_contours.push_back(temp_contour);
 		temp_contour.clear();
 	}
-	return  saved_contours;
+	return saved_contours;
 }
 
 
@@ -291,7 +291,7 @@ vector<vector<Point>> movebigcontours(vector<vector<Point>> contours, Mat edges)
 			}//not_reached_edge[i].push_back(Point(xpo, ypo));
 		}
 
-		if (counter >= 0.05*contours[i].size() && counter <= 0.15*contours[i].size())
+		if (counter >= 0.02*contours[i].size() && counter <= 0.15*contours[i].size())
 			not_reached_edge.push_back(contours[i]);
 		else
 			reached_edge.push_back(contours[i]);
@@ -327,49 +327,169 @@ vector<vector<Point>> movebigcontours(vector<vector<Point>> contours, Mat edges)
 
 vector<vector<Point>> removeunwantedblack(vector<vector<Point>> contours, Mat img)
 {
-	Mat img_LAB, thresh_img;
+	Mat img_LAB;
+	Mat thresh_img(img.rows, img.cols, CV_8U);
 	vector<vector<Point>> store_contours; vector<vector<Point>> saved_contours;
 	vector<Rect> boundRect(contours.size());
 	cvtColor(img, img_LAB, CV_BGR2Lab);
 	cv::inRange(img_LAB, cv::Scalar(0, 100, 100), cv::Scalar(30, 150, 150), thresh_img);
 	dilate(thresh_img, thresh_img, Mat());
 	int last = contours.size() - 1;
-	for (int i = 0; i < contours.size()-1; i++)
+	for (int i = 0; i < contours.size(); i++)
 	{
 
-	
-			
-			boundRect[i] = boundingRect(Mat(contours[i]));
-			if ((boundRect[i].x > 0) && (boundRect[i].y > 0) && (boundRect[i].x < 1024) && (boundRect[i].y < 1024))
+		boundRect[i] = boundingRect(Mat(contours[i]));
+		if ((boundRect[i].x >0) && (boundRect[i].y > 0) && (boundRect[i].x < 1000) && (boundRect[i].y < 1000))
+		{
+			float test1 = boundRect[i].x - boundRect[i].width;
+			float test2 = boundRect[i].y - boundRect[i].height;
+			float test3 = boundRect[i].x + boundRect[i].width;
+			float test4 = boundRect[i].y + boundRect[i].height;
+			if ((test1 < 0) || (test2 < 0) || (test3>1024) || (test4>1024))
 			{
-
-				Mat roi = thresh_img(boundRect[i]);// creating a new image from roi
-				if (roi.rows < 1024 && roi.cols < 1024)
-				{
-					int imgsiz = roi.cols*  roi.rows;
-					int  blackpix = countNonZero(roi); // count of number of white pixels in thresholded ROI
-					int remain_pix = imgsiz - blackpix;
-					if ((remain_pix / blackpix)< 0.8 && (fabs(contourArea(Mat(contours[i]))) <5000))//(remain_pix <= 1000)
-					{
-						//cout << "IN  " << (float) remain_pix / blackpix << endl;  //cout << imgsiz/remain_pix<< endl;
-						
-							store_contours.push_back(contours[i]);
-						/*else
-							saved_contours.push_back(contours[i]);*/
-
-					}
-					else
-						saved_contours.push_back(contours[i]);
-					
-						///cout << "OUT  " << (float) remain_pix / blackpix << endl;
-				}
+				continue;
 			}
-			/*else
-				cout << "WHOOPS";*/
+			Mat roi = thresh_img(boundRect[i]);// creating a new image from roi
+			if (roi.rows < 1024 && roi.cols < 1024)
+			{
+				//		int imgsiz = roi.rows*  roi.cols;
+
+				int blackpix = countNonZero(roi); // count of number of white pixels in thresholded ROI
+				int remain_pix = (roi.rows*roi.cols) - blackpix;
+				if ((remain_pix / blackpix)< 0.8 && (fabs(contourArea(Mat(contours[i]))) <5000))//(remain_pix <= 1000)
+				{
+					//cout << "IN  " << (float) remain_pix / blackpix << endl;  //cout << imgsiz/remain_pix<< endl;
+
+					store_contours.push_back(contours[i]);
+					/*else
+					saved_contours.push_back(contours[i]);*/
+
+				}
+				else
+					saved_contours.push_back(contours[i]);
+
+				///cout << "OUT  " << (float) remain_pix / blackpix << endl;
+			}
 		}
+		/*else
+		cout << "WHOOPS";*/
+	}
 	saved_contours.push_back(contours[last]);
 	return saved_contours;
+}
+
+
+vector<vector<Point>> cleancontours(vector<vector<Point>> contours, vector<vector<Point>> mergecontours, vector<int> index)
+{
+	cout << "IN  CleanContours" << endl;
+	vector<vector<Point>> newcontours;
+	cout << "Contour and Index size:  " << contours.size() << ", " << index.size() << endl;
+	for (int i = 0; i < contours.size(); i++)
+	{
+		if (std::find(index.begin(), index.end(), i) == index.end())// not present
+		{
+			if ((std::find(newcontours.begin(), newcontours.end(), contours[i]) == newcontours.end()))
+				newcontours.push_back(contours[i]);
+		}
 	}
+	for (int p = 0; p < mergecontours.size(); p++)
+	{
+		if ((std::find(newcontours.begin(), newcontours.end(), mergecontours[p]) == newcontours.end()))
+			newcontours.push_back(mergecontours[p]);
+	}
+
+	cout << "OUT  CleanContours" << endl;
+	return newcontours;
+
+}
+
+vector<Point> mergecontours(Mat img, vector<Point> contourA, vector<Point> contourB)
+{
+	//	cout << "IN Merge Contours" << endl;
+	vector<vector<Point>> fincont;
+	fincont.push_back(contourA);
+	fincont.push_back(contourB);
+
+	Mat checkimg(img.rows, img.cols, CV_8UC1);
+	checkimg.setTo(Scalar(0, 0, 0));
+	for (int i = 0; i < fincont.size(); i++)
+		drawContours(checkimg, fincont, i, Scalar(255, 255, 255), CV_FILLED, 8);
+
+	vector<vector<Point>> mergedcontours; vector<Vec4i> hierarchy;
+	findContours(checkimg, mergedcontours, hierarchy, CV_RETR_CCOMP, cv::CHAIN_APPROX_NONE);
+	if (mergedcontours.size()>1)
+	{
+		dilate(checkimg, checkimg, Mat()); dilate(checkimg, checkimg, Mat());
+	}
+	findContours(checkimg, mergedcontours, hierarchy, CV_RETR_CCOMP, cv::CHAIN_APPROX_NONE);
+	//cout << "Merged Contour size :   " << fincont.size() << ","<< mergedcontours.size() << endl;
+	return mergedcontours[0];
+
+
+}
+
+vector<vector<Point>> findmerge(Mat img, vector<vector<Point>> &contours)
+{
+	//	cout << "IN  findmerge" << endl;
+
+	Mat imgclone = img.clone();
+	//imshow("contour Orignal", img);
+	//cout <<"Before  "<< contours.size()<< endl;
+	vector<vector<Point>> mergedcontours;
+	vector<int> index;
+	Mat checkimg1(img.rows, img.cols, CV_8UC1);
+	checkimg1.setTo(Scalar(0, 0, 0));
+	Mat checkimg2(img.rows, img.cols, CV_8UC1);
+	checkimg2.setTo(Scalar(0, 0, 0));
+	Mat result(img.rows, img.cols, CV_8UC1);
+	result.setTo(Scalar(0, 0, 0));
+
+	for (int i = 0; i < contours.size(); i++)
+	{
+		drawContours(checkimg1, contours, i, Scalar(255, 255, 255), CV_FILLED, 8);
+
+		for (int j = 0; j < contours.size(); j++)
+		{
+			if (j != i)
+			{
+				drawContours(checkimg2, contours, j, Scalar(255, 255, 255), CV_FILLED, 8);
+				bitwise_and(checkimg1, checkimg2, result);
+				if (countNonZero(result)> 5)
+				{
+					vector<Point> merged = mergecontours(img, contours[i], contours[j]);
+					/*std::find searches in the range defined by its first two arguments. It returns an iterator pointing to the first element that matches. If no element matches, it returns its 2nd parameter.*/
+					if (std::find(index.begin(), index.end(), i) != index.end())// if present
+					{
+					}
+					else
+						index.push_back(i);
+
+					if (std::find(index.begin(), index.end(), j) != index.end())// if present
+					{
+					}
+					else
+						index.push_back(j);
+					/*contours.erase(contours.begin() + i);
+					contours.erase(contours.begin() + j);*/
+					mergedcontours.push_back(merged);
+				}
+
+				checkimg2.setTo(Scalar(0, 0, 0));
+				result.setTo(Scalar(0, 0, 0));
+			}
+		}
+		checkimg1.setTo(Scalar(0, 0, 0));
+	}
+
+	vector<vector<Point>> newcontours = cleancontours(contours, mergedcontours, index);
+	cout << "Before  " << contours.size() << endl;
+	cout << "After  " << newcontours.size() << endl;
+	//	cout << "OUT  findmerge" << endl;
+
+	return newcontours;
+	//imshow("contour Orignal", imgclone);
+
+}
 
 
 
@@ -378,16 +498,18 @@ vector<vector<Point>> removeunwantedblack(vector<vector<Point>> contours, Mat im
 int main()
 {
 	// =============================== Initialization===============================================
-	std::ifstream file("testset16.5.txt");
+	std::ifstream file("quick_testset16.5.txt");
 	std::string imname;
 	while (std::getline(file, imname))
 	{
-		string imagepath = format("C:\\CCHMC\\LungMap\\Lung_16.5_TestSet\\%s", imname.c_str());
-		string imageWritePath = format("C:\\CCHMC\\LungMap\\Segmented\\mod_%s", imname.c_str());
-		string imageWritePath2 = format("C:\\CCHMC\\LungMap\\Segmented\\remove_%s", imname.c_str());
+		string imagepath = format("C:\\Users\\VIneeta\\Documents\\Visual Studio 2013\\Projects\\OpenCV-Test\\OpenCV-Test\\Lung_16.5_TestSet\\%s", imname.c_str());
+		string imageWritePath = format("C:\\Users\\VIneeta\\Documents\\Visual Studio 2013\\Projects\\OpenCV-Test\\OpenCV-Test\\Lung_16.5_TestSet\\Segmented\\mod_%s", imname.c_str());
+		string imageWritePath2 = format("C:\\Users\\VIneeta\\Documents\\Visual Studio 2013\\Projects\\OpenCV-Test\\OpenCV-Test\\Lung_16.5_TestSet\\Segmented\\remove_%s", imname.c_str());
 		Mat inputImage = imread(imagepath);
 		if (inputImage.empty())
-			cout << "NOT FOUND" << endl;
+		{
+			cout << "NOT FOUND" << endl; continue;
+		}
 		else
 			cout << format("processing %s", imname.c_str()) << endl;
 
@@ -399,7 +521,7 @@ int main()
 		int xpo = 0, ypo = 0;
 		double A; //angle
 		Point pin;
-		Mat  grad_x, grad_y, grad, blurImage;
+		Mat grad_x, grad_y, grad, blurImage;
 		vector<vector<Point>> black_contours, storconts, contours, DrawCont; // Vector for storing contour
 		vector<Point>storag, coont, backup;
 		vector<Vec4i> black_hierarchy;
@@ -408,35 +530,44 @@ int main()
 		vector<int> ido;
 		Mat img_LAB;
 
-		Mat orient = helpangletime(inputImage);
+		Mat orient = helpangletime(inputImage); // calculates angle of gradient
 
 		/*~~~~~CALL~~~~~~*/
-		coverup(inputImage);   //Covers up the written text
+		//coverup(inputImage);   //Covers up the written text
 
 		Mat cloneImage = inputImage.clone(); //to draw contours on
 		// =============================== =================================================================
 		Mat cloneImage2 = inputImage.clone();
+		Mat tempImage = inputImage.clone();
+		Mat tempImage1 = inputImage.clone();
+		Mat tempImage2 = inputImage.clone();
+		Mat tempImage3 = inputImage.clone();
+		Mat tempImage4 = inputImage.clone();
 		/*~~~~~CALL~~~~~~*/
 		Mat edges = findedges(inputImage, imname);// returns edges of the image
 		/*~~~~~CALL~~~~~~*/
 		findgradient(inputImage, grad_x, grad_y, grad);// finds gradient of the whole image once in the program
 
 
-		// ##  STEP 1 : Find good black contours 
-		//===== ======================= Thresholding &  Contouring===============================================
+		// ##  STEP 1 : Find good black contours 
+		//===== ======================= Thresholding &  Contouring===============================================
 		Mat thr_inputImage(inputImage.rows, inputImage.cols, CV_8UC1);
-		GaussianBlur(inputImage, blurImage, Size(7, 7), 0, 0, 4);  // removing unnecessary noisy background
-		cv::inRange(blurImage, cv::Scalar(0, 0, 0), cv::Scalar(35, 45, 45), thr_inputImage);//35, 30, 30)  35, 45, 35
+		// removing unnecessary noisy background
+		GaussianBlur(inputImage, blurImage, Size(7, 7), 0, 0, 4); 
+		cv::inRange(blurImage, cv::Scalar(0, 0, 0), cv::Scalar(35, 45, 45), thr_inputImage);//35, 30, 30)  35, 45, 35
 		findContours(thr_inputImage, black_contours, black_hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE); // find all black contours
-
-		for (int dop = 0; dop < black_contours.size(); dop++)  // finding and saving the contours that are above a certain area
+		// finding and saving the contours that are above a certain area
+		for (int dop = 0; dop < black_contours.size(); dop++)
 		{
 			float cont_area = contourArea(black_contours[dop], false);
 			if (cont_area > areathresh)
 				contours.push_back(black_contours[dop]); //saving only the large contours in another variable
 		}
-
-		// ##  END STEP 1
+		/*for (int g = 0; g < contours.size(); g++)  // finding and saving the contours that are above a certain area
+		{
+		drawContours(tempImage, contours, g, Scalar(0, 255, 255), 2, 8, vector<Vec4i>(), 0, Point());
+		// ##  END STEP 1
+		}*/
 
 
 		/*~~~~~CALL~~~~~~*/
@@ -467,7 +598,12 @@ int main()
 				if (uu == 1)
 					no_of_edges++;
 			}
-
+			/*for (int g = 0; g < temp_contours.size(); g++)  // finding and saving the contours that are above a certain area
+			{
+			drawContours(tempImage1, temp_contours, g, Scalar(0, 255, 255), 2, 8, vector<Vec4i>(), 0, Point());
+			// ##  END STEP 1
+			}
+			imwrite("Step2.png", tempImage1);*/
 
 			// SUBSEQUENT RUNS : Moving the points in the contour by 5 and checking if edge point till atleast half the points in the contour are edge points
 
@@ -478,7 +614,7 @@ int main()
 				Point2f recalc_centroi = findcentroid(temp_contours[i]);
 				for (int jo = 0; jo < temp_contours[i].size(); jo++)// going through points in every contour
 				{
-					pin = temp_contours[i][jo];// a particular point j in contour 
+					pin = temp_contours[i][jo];// a particular point j in contour 
 					//pin = mcontours[i][jo];
 
 					A = angletime(orient, pin.x, pin.y, recalc_centroi.x + 15, recalc_centroi.y, recalc_centroi.x, recalc_centroi.y);// finding angle at each point of the contour
@@ -489,7 +625,7 @@ int main()
 				}
 
 
-				//if no of edges is leasser than half the size of alternate_contours  // else: moves on to next set of contour
+				//if no of edges is leasser than half the size of alternate_contours  // else: moves on to next set of contour
 				if (no_of_edges < alternate_contours[i].size() / 2)
 				{
 					no_of_edges = 0;
@@ -508,6 +644,8 @@ int main()
 
 		/*~~~~~CALL~~~~~~*/vector<vector<Point>>lapo = movesomemore(orient, alternate_contours);
 
+
+		//----------------------- Working with the bigger contours-------------------------------
 		vector<vector<Point>> big_contours;
 		for (int ido = 0; ido < lapo.size(); ido++)
 		{
@@ -533,14 +671,27 @@ int main()
 
 
 
-		vector<vector<Point>> new_contours= removeunwantedblack(store_contours, inputImage);
-		for (int g = 0; g < new_contours.size(); g++)
+		vector<vector<Point>> new_contours = removeunwantedblack(store_contours, inputImage);
+		/*for (int g = 0; g < new_contours.size(); g++)  // finding and saving the contours that are above a certain area
 		{
-			drawContours(cloneImage2, new_contours, g, Scalar(0, 255, 255), 2, 8, vector<Vec4i>(), 0, Point());
+		drawContours(tempImage2, new_contours, g, Scalar(0, 255, 255), 2, 8, vector<Vec4i>(), 0, Point());
+		// ##  END STEP 1
 		}
-		imwrite(imageWritePath, cloneImage);
+		imwrite("Step3.png", tempImage2);*/
+		vector<vector<Point>> newcont = findmerge(inputImage, new_contours);
+
+
+		//cout <<"before  "<<  new_contours.size() << endl;;
+		//cout << "after  " <<newcont.size()<< endl;
+
+
+		for (int g = 0; g < newcont.size(); g++)
+			drawContours(cloneImage2, newcont, g, Scalar(0, 255, 255), CV_FILLED, 8, vector<Vec4i>(), 0, Point());
+
+		//imwrite(imageWritePath, cloneImage);
 		imwrite(imageWritePath2, cloneImage2);
-		waitKey(0);
+		cout << "DOME!!" << endl;
 
 	}
+	waitKey(0);
 }
